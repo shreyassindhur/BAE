@@ -67,37 +67,6 @@ locally on port 8000, it already points there by default (`API_BASE` at the
 top of the `<script>` tag).
 
 Upload a CSV, ask a question, done.
-
-## Deploying for free (so it's a live link, not just a repo)
-
-**Backend — Render.com (free web service)**
-1. Push this repo to GitHub
-2. On Render: New → Web Service → connect your repo, root directory `backend`
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-5. Add environment variable `GROQ_API_KEY` in Render's dashboard
-6. Deploy — you'll get a URL like `https://your-app.onrender.com`
-
-(Render's free tier spins down after inactivity and takes ~30s to wake up —
-fine for demos and early customers, upgrade later if it becomes a problem.)
-
-**Frontend — Netlify or Vercel (free static hosting), or even GitHub Pages**
-1. Edit `frontend/index.html`: set `API_BASE` to your Render backend URL
-2. Drag the `frontend` folder into Netlify's deploy zone (netlify.com/drop),
-   or connect the repo on Vercel and set the root directory to `frontend`
-3. You now have a real live URL to put on your resume / send to a client
-
-## Extending it (good next steps for your resume story)
-
-- Add per-user auth (Supabase free tier has auth + Postgres)
-- Persist datasets to a real database instead of in-memory session storage
-- Add chart rendering on the frontend (Chart.js, already CDN-friendly)
-- Add a "generate PDF report" export button, reusing your Distill project's
-  export logic
-- Rate-limit /query per session to control API costs once you have real users
-
-## Selling it
-
 See the go-to-market plan discussed alongside this build: target one small
 vertical first (retail/e-commerce shop owners are the easiest first
 customers), price around ₹1,500–3,000/month or a flat setup fee, and lead
