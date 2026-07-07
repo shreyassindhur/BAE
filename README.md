@@ -38,7 +38,7 @@ The actual computation always happens in real pandas. This means:
 - A malicious/confused LLM response can, at worst, be rejected — never executed as code
 - It's a genuinely defensible security/reliability story, not just "we called an LLM"
 
-## Running it locally (free)
+## Running it locally
 
 ### 1. Backend
 
