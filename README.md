@@ -1,4 +1,4 @@
-# Ledger — Chat With Your Data
+# BAE — talk to your data like it's your bae!
 
 A tool that lets a small business owner upload a CSV/Excel file and ask
 questions about it in plain English — "what are my top 5 products?", "show
