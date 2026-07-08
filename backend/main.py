@@ -61,8 +61,17 @@ class QueryRequest(BaseModel):
     question: str
 
 
+class ClearRequest(BaseModel):
+    session_id: str
+
+
+class RemoveSourceRequest(BaseModel):
+    session_id: str
+    source: str
+
+
 def _new_session() -> dict:
-    return {"df": None, "schema": None, "doc_store": None, "history": []}
+    return {"df": None, "schema": None, "structured_source": None, "doc_store": None, "history": []}
 
 
 @app.get("/health")
@@ -106,6 +115,7 @@ async def upload_file(file: UploadFile = File(...), session_id: Optional[str] = 
             raise HTTPException(status_code=400, detail=f"Could not parse file: {e}")
         session["df"] = df
         session["schema"] = data_engine.infer_schema(df)
+        session["structured_source"] = file.filename
         message = f"Loaded {len(df)} rows and {len(df.columns)} columns from {file.filename}."
     else:
         if session["doc_store"] is None:
@@ -122,6 +132,44 @@ async def upload_file(file: UploadFile = File(...), session_id: Optional[str] = 
         "documents": session["doc_store"].list_sources() if session["doc_store"] else [],
         "message": message,
     }
+
+
+@app.post("/clear")
+async def clear_sources(req: ClearRequest):
+    session = SESSIONS.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    session["df"] = None
+    session["schema"] = None
+    session["structured_source"] = None
+    session["doc_store"] = None
+    session["history"] = []
+    return {"message": "All sources cleared."}
+
+
+@app.post("/remove-source")
+async def remove_source(req: RemoveSourceRequest):
+    session = SESSIONS.get(req.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    if session.get("structured_source") == req.source:
+        session["df"] = None
+        session["schema"] = None
+        session["structured_source"] = None
+    elif session["doc_store"]:
+        session["doc_store"].remove_source(req.source)
+    else:
+        raise HTTPException(status_code=404, detail="Source not found.")
+
+    remaining = []
+    if session["structured_source"]:
+        remaining.append({"name": session["structured_source"], "type": "structured"})
+    if session["doc_store"]:
+        for s in session["doc_store"].list_sources():
+            remaining.append({"name": s, "type": "document"})
+
+    return {"message": f"Removed {req.source}.", "sources": remaining, "schema": session["schema"]}
 
 
 @app.post("/query")

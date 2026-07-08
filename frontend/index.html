@@ -91,6 +91,13 @@
   }
   .upload-zone p strong { color: var(--text); }
   .schema-list { flex: 1; overflow-y: auto; }
+  .clear-btn {
+    font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-soft); background: none;
+    border: 1px solid var(--border); padding: 6px 0; cursor: pointer;
+    width: 100%; text-align: center; margin-top: 8px; transition: all 0.15s;
+  }
+  .clear-btn:hover { color: var(--accent); border-color: var(--accent); }
   .schema-row {
     display: flex; justify-content: space-between; align-items: center;
     padding: 6px 0; border-bottom: 1px solid var(--border);
@@ -111,6 +118,12 @@
     font-family: var(--mono); letter-spacing: 0.3px;
     background: var(--surface-2); color: var(--text-soft);
   }
+  .remove-src {
+    cursor: pointer; margin-left: 4px; font-size: 11px; font-family: sans-serif;
+    color: var(--text-soft); transition: color 0.15s;
+  }
+  .remove-src:hover { color: var(--error); }
+  .schema-row .col-type .remove-src { color: var(--text-soft); font-size: 10px; }
   .status-line {
     font-size: 11px; font-family: var(--mono); color: var(--good);
     padding: 4px 0; line-height: 1.4;
@@ -248,6 +261,7 @@
       </label>
       <div id="statusLine" class="status-line"></div>
       <div class="schema-list" id="schemaList"></div>
+      <button id="clearBtn" class="clear-btn" style="display:none" onclick="clearSources()">Clear all sources</button>
     </div>
 
     <div class="chat-panel">
@@ -284,6 +298,8 @@
   const sendBtn = $('sendBtn');
   const statusDot = $('statusDot');
 
+  let structSource = null;
+
   function ready(on) { statusDot.className = 'dot' + (on ? ' active' : ''); }
   ready(false);
 
@@ -308,8 +324,9 @@
       sessionId = d.session_id;
       statusLine.textContent = d.message;
       statusLine.className = 'status-line';
-      if (d.schema) renderSchema(d.schema);
+      if (d.schema) { structSource = file.name; renderSchema(d.schema); }
       if (d.documents?.length) renderDocs(d.documents);
+      $('clearBtn').style.display = 'block';
       questionInput.disabled = false; sendBtn.disabled = false; ready(true);
       clearEmpty();
     } catch(e) { statusLine.textContent = 'Error: '+e.message; statusLine.className = 'status-line error'; }
@@ -319,15 +336,17 @@
     const el = $('docList'); if (el) el.remove();
     const div = document.createElement('div'); div.id = 'docList';
     div.innerHTML = sources.map(s =>
-      `<div class="schema-row"><span class="col-name">${esc(s)}</span><span class="doc-badge">indexed</span></div>`
+      `<div class="schema-row"><span class="col-name">${esc(s)}</span><span class="doc-badge">indexed <span class="remove-src" onclick="removeSource('${esc(s)}')">✕</span></span></div>`
     ).join('');
     schemaList.appendChild(div);
   }
 
   function renderSchema(schema) {
-    schemaList.innerHTML = schema.columns.map(c =>
+    let html = structSource ? `<div class="schema-row"><span class="col-name">${esc(structSource)}</span><span class="col-type">csv/xlsx <span class="remove-src" onclick="removeSource('${esc(structSource)}')">✕</span></span></div>` : '';
+    html += schema.columns.map(c =>
       `<div class="schema-row"><span class="col-name">${esc(c.name)}</span><span class="col-type ${c.type}">${c.type}</span></div>`
     ).join('');
+    schemaList.innerHTML = html;
   }
 
   function clearEmpty() { const e = chatLog.querySelector('.empty-state'); if (e) e.remove(); }
@@ -367,7 +386,7 @@
 
   function updateBubble(id, text, table, citations) {
     const div = $(id);
-    let h = `<div class="meta">assistant</div><div class="body">${esc(text)}`;
+    let h = `<div class="meta">BAE</div><div class="body">${esc(text)}`;
     if (table?.length) h += tbl(table);
     if (citations?.length) h += '<div class="citations">'+citations.map(c =>
       `<span class="citation-tag">${esc(c.source)} · ch ${c.chunk_index} · ${(c.relevance*100).toFixed(0)}%</span>`
@@ -388,6 +407,43 @@
   }
 
   function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+  async function clearSources() {
+    if (!sessionId) return;
+    try {
+      await fetch(`${API_BASE}/clear`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ session_id: sessionId })
+      });
+      sessionId = null;
+      schemaList.innerHTML = '';
+      $('clearBtn').style.display = 'none';
+      statusLine.textContent = '';
+      questionInput.disabled = true; sendBtn.disabled = true; ready(false);
+      chatLog.innerHTML = '<div class="empty-state"><div class="main">Upload a file to get started</div>works with CSVs, Excel, PDFs, Word docs<br/><span class="hint">try "what is the average age?"</span></div>';
+    } catch(e) { statusLine.textContent = 'Error clearing: '+e.message; statusLine.className = 'status-line error'; }
+  }
+
+  async function removeSource(name) {
+    if (!sessionId) return;
+    try {
+      const r = await fetch(`${API_BASE}/remove-source`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ session_id: sessionId, source: name })
+      });
+      if (!r.ok) throw new Error((await r.json()).detail||'Failed');
+      const d = await r.json();
+      if (structSource === name) structSource = null;
+      // Re-render with remaining sources
+      schemaList.innerHTML = '';
+      if (d.schema) { structSource = name === structSource ? null : structSource; renderSchema(d.schema); }
+      if (d.sources?.length) renderDocs(d.sources.filter(s => s.type === 'document').map(s => s.name));
+      if (!d.schema && !d.sources?.length) {
+        $('clearBtn').style.display = 'none';
+        questionInput.disabled = true; sendBtn.disabled = true; ready(false);
+      }
+    } catch(e) { statusLine.textContent = 'Error: '+e.message; statusLine.className = 'status-line error'; }
+  }
 </script>
 </body>
 </html>

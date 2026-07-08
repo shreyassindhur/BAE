@@ -41,6 +41,11 @@ between groups, prioritize "groupby_agg" to compare averages/stats across those 
 or "correlation" to see what relates to the target. Do NOT just use "value_counts" 
 unless specifically asked for frequencies.
 
+CRITICAL: When the user asks about a specific subgroup (e.g. "who died", 
+"survivors", "first class", "men", "women") — ALWAYS use "groupby_agg" with the 
+relevant column as group_by to show BOTH groups side by side, OR "filter_sort_top_n"
+with the correct filter. Do NOT accidentally compute the wrong group.
+
 Rules:
 - ONLY use column names that literally exist in the provided schema.
 - Respond with ONLY ONE valid JSON object. No markdown, no explanations, no backticks.
@@ -239,10 +244,11 @@ def answer_from_documents(question: str, retrieved_chunks: list[dict], history: 
         for c in retrieved_chunks
     )
 
-    prompt = f"""Answer the user's question using ONLY the context below. If the
-context doesn't fully answer it, say what's missing rather than guessing.
-Do not invent facts not present in the context. After your answer, do not
-repeat the sources - they will be shown separately.
+    prompt = f"""Answer the user's question using ONLY the context below.
+Start directly with the answer. Be confident if the context supports it.
+If the context lacks the information entirely, say so — but don't lead with
+what's missing when you already have enough to answer.
+Do not invent facts not present in the context.
 
 CONTEXT:
 {context_blocks}

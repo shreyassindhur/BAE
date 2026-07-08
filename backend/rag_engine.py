@@ -13,17 +13,10 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 import docx  # python-docx
 
-# Lazy-loaded embedding model
-_embedding_model = None
+from sentence_transformers import SentenceTransformer
 
-
-def _get_model():
-    global _embedding_model
-    if _embedding_model is None:
-        from sentence_transformers import SentenceTransformer
-        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embedding_model
-
+# Load model once at startup
+_embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # ---------- Text extraction ----------
 
@@ -60,8 +53,7 @@ def chunk_text(text: str) -> list[str]:
 # ---------- Embeddings (sentence-transformers) ----------
 
 def embed_texts(texts: list[str]) -> np.ndarray:
-    model = _get_model()
-    return model.encode(texts, normalize_embeddings=True)
+    return _embedding_model.encode(texts, normalize_embeddings=True)
 
 
 def _cosine_sim(query_vec: np.ndarray, matrix: np.ndarray) -> np.ndarray:
@@ -125,3 +117,21 @@ class DocumentStore:
 
     def list_sources(self) -> list[str]:
         return sorted(set(self.sources))
+
+    def remove_source(self, source_name: str) -> bool:
+        """Remove all chunks belonging to a source. Returns True if found."""
+        indices = [i for i, s in enumerate(self.sources) if s == source_name]
+        if not indices:
+            return False
+
+        keep = [i for i in range(len(self.chunks)) if i not in indices]
+
+        self.chunks = [self.chunks[i] for i in keep]
+        self.sources = [self.sources[i] for i in keep]
+        self.chunk_indices = [self.chunk_indices[i] for i in keep]
+        if self.embeddings is not None and len(keep) > 0:
+            self.embeddings = self.embeddings[keep]
+        elif not keep:
+            self.embeddings = None
+
+        return True
