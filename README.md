@@ -1,74 +1,129 @@
-# BAE — talk to your data like it's your bae!
+# BAE — talk to your data like it's your bae
 
-A tool that lets a small business owner upload a CSV/Excel file and ask
-questions about it in plain English — "what are my top 5 products?", "show
-me sales trend by month" — and get back a real, computed answer (not an AI
-guess), with a table and plain-English explanation.
+A local RAG system that knows when to calculate and when to search. Routes math questions to pandas (exact computation) and text questions to vector search (semantic retrieval). No data leaves your machine. Free to use.
 
-## How it works (architecture)
+**This project is for local/portfolio use only. Not licensed for commercial deployment.**
+
+## How it works
 
 ```
-Browser (index.html)
-   │  upload file
+Browser (frontend/index.html)
+   │  upload CSV, Excel, PDF, or DOCX
    ▼
-FastAPI backend (main.py)
-   │  parses file -> pandas DataFrame, infers schema
-   ▼
-llm_agent.py  ──►  Groq API (free, Llama model)
-   │  "Given this schema + question, output ONE structured
-   │   operation spec (JSON) from a fixed menu of operations."
-   ▼
-data_engine.py
-   │  executes ONLY that operation, using real pandas code
-   │  (groupby, sort, resample, etc.) — never arbitrary code
-   ▼
-Result table (guaranteed-correct numbers)
+FastAPI backend (backend/main.py)
    │
-llm_agent.py (2nd call) -> turns table into a friendly sentence
-   ▼
-Returned to browser, rendered as chat bubble + table
+   ├──► Structured engine (data_engine.py)
+   │     CSV/XLSX → pandas → schema → LLM picks safe operation
+   │     "average fare?" → groupby_agg → exact numbers
+   │
+   └──► Semantic engine (rag_engine.py)
+           PDF/DOCX/TXT → chunk → sentence-transformers → vector search
+           "why did the Titanic sink?" → retrieve chunks → LLM summarizes
 ```
 
-**Why this design matters (and is worth explaining in interviews):**
-The LLM is never allowed to execute code or do arithmetic itself. It only
-ever picks from a small, fixed set of operations (`groupby_agg`,
-`trend_over_time`, `value_counts`, etc.), each with validated column names.
-The actual computation always happens in real pandas. This means:
-- Numbers can never be hallucinated
-- A malicious/confused LLM response can, at worst, be rejected — never executed as code
-- It's a genuinely defensible security/reliability story, not just "we called an LLM"
+**Key design principle:** The LLM never touches your data or executes code. It only picks from a fixed whitelist of 8 safe operations. All computation happens in real pandas. Numbers cannot be hallucinated.
 
-## Running it locally
+## What you need
 
-### 1. Backend
+- Python **3.10 – 3.12** (3.14 may work but requires manual torch/sentence-transformers setup)
+- A **free Groq API key** from https://console.groq.com
+- ~1 GB free disk space (for the sentence-transformers model)
+- Internet connection (first run only — downloads the embedding model + Groq calls)
+
+## Setup instructions
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/shreyassindhur/BAE.git
+cd BAE
+```
+
+### 2. Set up the backend
 
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate     # Windows: venv\Scripts\activate
+
+# Activate:
+# Windows:
+venv\Scripts\activate
+# Mac/Linux:
+source venv/bin/activate
+
 pip install -r requirements.txt
-cp .env.example .env         # then edit .env and add your GROQ_API_KEY
 ```
 
-Get a **free** Groq API key at https://console.groq.com (no card required
-at time of writing — always check their current pricing/limits page).
+### 3. Configure your API key
+
+Create a `.env` file inside the `backend` folder:
+
+```
+GROQ_API_KEY=gsk_your_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+Get a free key at https://console.groq.com — no credit card required.
+
+### 4. Start the backend
 
 ```bash
-export $(cat .env | xargs)   # loads env vars on Mac/Linux
-uvicorn main:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
 
-Backend is now running at `http://localhost:8000`.
+Wait for the server to fully start. The first startup will download the `all-MiniLM-L6-v2` embedding model (~90 MB). This happens once.
 
-### 2. Frontend
+You should see:
+```
+INFO:     Uvicorn running on http://127.0.0.1:8000
+```
 
-Just open `frontend/index.html` in a browser. If your backend is running
-locally on port 8000, it already points there by default (`API_BASE` at the
-top of the `<script>` tag).
+### 5. Open the frontend
 
-Upload a CSV, ask a question, done.
-See the go-to-market plan discussed alongside this build: target one small
-vertical first (retail/e-commerce shop owners are the easiest first
-customers), price around ₹1,500–3,000/month or a flat setup fee, and lead
-with the pitch: "Upload your sales sheet, ask questions in plain English,
-no Excel formulas needed."
+Open `frontend/index.html` in any modern browser (Chrome, Edge, Firefox).
+
+The frontend is already configured to connect to `http://localhost:8000`.
+
+### 6. Upload data and ask questions
+
+**Structured data (CSV/XLSX):**
+- "What is the average fare by class?"
+- "Show top 5 oldest passengers"
+- "Which columns have missing data?"
+- "What are the common traits of survivors?"
+
+**Documents (PDF/DOCX/TXT):**
+- "Why did the Titanic sink?"
+- "Explain the historical context"
+- Any question answered by your document's content
+
+## Files
+
+| File | Purpose |
+| :--- | :--- |
+| `backend/main.py` | FastAPI server — upload, query, clear endpoints |
+| `backend/llm_agent.py` | LLM interaction — routing, operation planning, summarization |
+| `backend/data_engine.py` | Pandas operations — 8 safe operations on structured data |
+| `backend/rag_engine.py` | Document RAG — text extraction, chunking, embeddings, search |
+| `backend/requirements.txt` | Python dependencies |
+| `frontend/index.html` | Single-page UI — upload, chat, results |
+
+## Limitations (read before using)
+
+- **No multi-source merge** — one question uses either structured OR semantic, not both
+- **No derived columns** — can only query columns that exist in the file
+- **No predictive analytics** — no forecasting, regression, or ML
+- **No multi-file joins** — works on one structured dataset per session
+- **Not for production deployment** — single-user, in-memory storage
+
+## License
+
+This project is for **personal and portfolio use only**. Commercial deployment, hosting as a service, or redistribution for profit is not permitted without explicit permission.
+
+## Built with
+
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [sentence-transformers](https://www.sbert.net/)
+- [Groq](https://groq.com/)
+- [LangChain Text Splitters](https://python.langchain.com/)
+- [pandas](https://pandas.pydata.org/)
