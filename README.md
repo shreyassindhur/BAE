@@ -1,4 +1,4 @@
-# BAE — talk to your data like it's your bae
+# BAE — talk to your data like it's your bae!
 
 A local RAG system that knows when to calculate and when to search. Routes math questions to pandas (exact computation) and text questions to vector search (semantic retrieval). No data leaves your machine. Free to use.
 
